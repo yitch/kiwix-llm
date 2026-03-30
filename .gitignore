@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ZIM files (large binary files)
+*.zim
+
+# Local data
+data/
+.zim-rag/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env

@@ -1,0 +1,49 @@
+# zim-rag configuration
+# Copy this to ~/.zim-rag/config.yaml and adjust as needed
+
+# Ollama settings
+ollama:
+  base_url: "http://localhost:11434"
+  # LLM model for answering questions
+  # Suggestions by RAM:
+  #   16GB: qwen3:8b or llama3.1:8b
+  #   24GB+: mistral-small or qwen3:14b
+  #   32GB+: llama3.1:70b-q4 or qwen3:32b
+  llm_model: "qwen3:8b"
+  # Embedding model (don't change unless you re-ingest)
+  embed_model: "nomic-embed-text"
+
+# ChromaDB settings
+chromadb:
+  persist_dir: "~/.zim-rag/chromadb"
+  collection_name: "zim_articles"
+
+# Chunking settings
+chunking:
+  chunk_size: 500        # tokens per chunk
+  chunk_overlap: 50      # overlap between chunks in tokens
+
+# Query settings
+query:
+  top_k: 5              # number of chunks to retrieve
+  # System prompt for the LLM
+  system_prompt: |
+    You are a helpful assistant that answers questions using the provided context from reference articles.
+    Always cite the source article titles in your answer.
+    If the context doesn't contain enough information to answer, say so honestly.
+    Do not make up information that isn't in the provided context.
+
+# Ingestion settings
+ingest:
+  batch_size: 100        # articles per batch during ingestion
+  # Skip articles shorter than this (in characters) — filters out stubs/redirects
+  min_article_length: 100
+
+# Serve settings
+serve:
+  host: "127.0.0.1"
+  port: 7860
+  kiwix_port: 8888       # port for kiwix-serve when --kiwix-browse is used
+
+# ZIM file directory (where download-zims.sh puts files)
+zim_dir: "~/zim-files"
