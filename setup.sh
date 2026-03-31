@@ -155,7 +155,9 @@ ollama pull nomic-embed-text
 
 # Detect RAM and suggest a model
 RAM_GB=$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.0f", $1/1073741824}')
-if [[ "$RAM_GB" -ge 24 ]]; then
+if [[ "$RAM_GB" -ge 32 ]]; then
+    LLM_MODEL="qwen3:14b"
+elif [[ "$RAM_GB" -ge 24 ]]; then
     LLM_MODEL="mistral-small"
 elif [[ "$RAM_GB" -ge 16 ]]; then
     LLM_MODEL="qwen3:8b"

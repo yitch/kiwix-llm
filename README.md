@@ -19,13 +19,28 @@ ZIM file → extract articles → chunk text → embed (nomic-embed-text)
 - **ChromaDB** stores embeddings persistently on disk
 - **Gradio** provides a simple web chat UI
 
-## Quick start
+## One-line install
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/yitch/kiwix-llm/main/install.sh)"
+```
+
+This clones the repo, installs all dependencies, pulls the right LLM for your RAM, and downloads a starter Wikipedia ZIM. Then just:
+
+```bash
+cd ~/kiwix-llm && source .venv/bin/activate
+ollama serve &                                          # start Ollama if not running
+zim-rag ingest ~/zim-files/wikipedia_en_top_maxi_2024-10.zim
+zim-rag query "What causes earthquakes?"
+```
+
+## Manual setup
 
 ```bash
 # 1. Clone and set up
 git clone https://github.com/yitch/kiwix-llm.git
 cd kiwix-llm
-chmod +x setup.sh download-zims.sh
+chmod +x setup.sh download-zims.sh install.sh
 ./setup.sh
 
 # 2. Activate the virtualenv
