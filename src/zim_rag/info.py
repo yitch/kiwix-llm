@@ -18,7 +18,10 @@ def get_chromadb_size(path: str) -> str:
     db_path = Path(path)
     if not db_path.exists():
         return "0 B"
-    total = sum(f.stat().st_size for f in db_path.rglob("*") if f.is_file())
+    total = sum(
+        f.stat().st_size for f in db_path.rglob("*")
+        if f.is_file() and not f.is_symlink()
+    )
     for unit in ["B", "KB", "MB", "GB"]:
         if total < 1024:
             return f"{total:.1f} {unit}"

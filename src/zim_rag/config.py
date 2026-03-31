@@ -107,10 +107,13 @@ class Config:
         """Load config from YAML file, falling back to defaults."""
         data: dict[str, Any] = {}
         if CONFIG_FILE.exists():
-            with open(CONFIG_FILE) as f:
-                raw = yaml.safe_load(f)
-                if isinstance(raw, dict):
-                    data = raw
+            try:
+                with open(CONFIG_FILE) as f:
+                    raw = yaml.safe_load(f)
+                    if isinstance(raw, dict):
+                        data = raw
+            except (yaml.YAMLError, OSError):
+                pass  # Fall through to defaults
 
         def get(section: str, key: str, default: Any) -> Any:
             section_data = data.get(section, {})
@@ -146,7 +149,10 @@ class Config:
         )
 
     def ensure_dirs(self) -> None:
-        """Create necessary directories."""
+        """Create necessary directories with restrictive permissions."""
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        Path(self.chromadb_dir).mkdir(parents=True, exist_ok=True)
+        CONFIG_DIR.chmod(0o700)
+        chromadb_path = Path(self.chromadb_dir)
+        chromadb_path.mkdir(parents=True, exist_ok=True)
+        chromadb_path.chmod(0o700)
         Path(self.zim_dir).mkdir(parents=True, exist_ok=True)

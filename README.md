@@ -107,6 +107,30 @@ zim-rag info
 
 Displays: chunk count, ingested ZIM files, ChromaDB size, config values, and available Ollama models.
 
+### `zim-rag service`
+
+Manage zim-rag as a macOS startup service (runs the web UI automatically on login).
+
+```bash
+zim-rag service install    # Enable web UI on startup
+zim-rag service status     # Check if it's running
+zim-rag service logs       # View recent logs
+zim-rag service stop       # Stop the service
+zim-rag service restart    # Restart the service
+zim-rag service uninstall  # Remove from startup
+```
+
+Or use the shell script directly:
+```bash
+./service.sh install       # Same as above
+```
+
+This creates a launchd agent that:
+- Starts Ollama on login (via `brew services`)
+- Starts the zim-rag web UI on login
+- Restarts automatically if it crashes
+- Logs to `~/.zim-rag/logs/`
+
 ## Configuration
 
 Config file: `~/.zim-rag/config.yaml` (created automatically by `setup.sh`).

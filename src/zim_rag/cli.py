@@ -114,5 +114,49 @@ def info():
     show_info(config)
 
 
+@main.command()
+@click.argument("action", type=click.Choice(["install", "uninstall", "start", "stop", "restart", "status", "logs"]))
+def service(action: str):
+    """Manage zim-rag as a macOS startup service.
+
+    \b
+    Actions:
+      install    Install and enable the web UI to start on login
+      uninstall  Remove the startup service
+      start      Start the service now
+      stop       Stop the service now
+      restart    Restart the service
+      status     Show whether the service is running
+      logs       Show recent service log output
+
+    Example: zim-rag service install
+    """
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    # Find service.sh relative to the installed package or working dir
+    candidates = [
+        Path(__file__).resolve().parent.parent.parent / "service.sh",
+        Path.cwd() / "service.sh",
+    ]
+    service_script = None
+    for candidate in candidates:
+        if candidate.exists():
+            service_script = candidate
+            break
+
+    if not service_script:
+        console.print("[red]Error:[/red] service.sh not found.")
+        console.print("[yellow]Run this command from the kiwix-llm project directory.[/yellow]")
+        raise SystemExit(1)
+
+    result = subprocess.run(
+        ["/bin/bash", str(service_script), action],
+        cwd=str(service_script.parent),
+    )
+    raise SystemExit(result.returncode)
+
+
 if __name__ == "__main__":
     main()

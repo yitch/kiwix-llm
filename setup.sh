@@ -64,17 +64,17 @@ else
     info "Ollama already installed: $(ollama --version 2>/dev/null || echo 'unknown version')"
 fi
 
-# ─── kiwix-tools ──────────────────────────────────────────────────────────────
+# ─── kiwix-tools (optional — for --kiwix-browse) ─────────────────────────────
 if ! command -v kiwix-serve &>/dev/null; then
-    info "Installing kiwix-tools..."
-    brew install kiwix-tools
+    info "kiwix-serve not found (optional — needed only for --kiwix-browse)."
+    info "Install Kiwix.app from https://kiwix.org or 'brew install --cask kiwix'."
 else
-    info "kiwix-tools already installed."
+    info "kiwix-serve found."
 fi
 
 # ─── Python ───────────────────────────────────────────────────────────────────
 PYTHON=""
-for candidate in python3.12 python3.11 python3; do
+for candidate in python3.13 python3.12 python3.11 python3; do
     if command -v "$candidate" &>/dev/null; then
         version=$("$candidate" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+')
         major=$(echo "$version" | cut -d. -f1)
@@ -117,9 +117,11 @@ mkdir -p "$CONFIG_DIR"
 if [[ ! -f "${CONFIG_DIR}/config.yaml" ]]; then
     info "Copying default config to ${CONFIG_DIR}/config.yaml"
     cp "${SCRIPT_DIR}/config.example.yaml" "${CONFIG_DIR}/config.yaml"
+    chmod 600 "${CONFIG_DIR}/config.yaml"
 else
     info "Config already exists at ${CONFIG_DIR}/config.yaml"
 fi
+chmod 700 "${CONFIG_DIR}"
 
 # ─── ZIM directory ────────────────────────────────────────────────────────────
 ZIM_DIR="$HOME/zim-files"
