@@ -9,6 +9,7 @@ from zim_rag.serve import (
     build_ui,
     _list_zim_files,
     _run_ingestion_stream,
+    _format_source_citations,
 )
 
 
@@ -192,3 +193,84 @@ class TestAccordion:
         assert any(a.open is False for a in accordions), (
             "At least one Accordion should be closed by default"
         )
+
+
+# ── Source Citations ─────────────────────────────────────────────────────────
+
+
+class TestSourceCitations:
+    """Source citations should group by ZIM file, not show raw article paths."""
+
+    def test_groups_by_zim_file(self):
+        """Sources should be grouped by ZIM filename, not listed per-chunk."""
+        chunks = [
+            {"metadata": {"title": "a/100723", "zim_filename": "electronics.stackexchange.com_en_all_2026-02.zim"}},
+            {"metadata": {"title": "a/100724", "zim_filename": "electronics.stackexchange.com_en_all_2026-02.zim"}},
+            {"metadata": {"title": "Photosynthesis", "zim_filename": "wikipedia_en_all_maxi_2026-02.zim"}},
+            {"metadata": {"title": "a/50001", "zim_filename": "physics.stackexchange.com_en_all_2026-02.zim"}},
+        ]
+        result = _format_source_citations(chunks, max_sources=20)
+        # Should NOT show raw paths like "a/100723"
+        assert "a/100723" not in result
+        assert "a/100724" not in result
+        # Should show friendly ZIM source names
+        assert "electronics" in result.lower()
+        assert "stackexchange" in result.lower()
+        assert "wikipedia" in result.lower()
+
+    def test_shows_real_titles_when_available(self):
+        """When articles have real titles, those should be shown."""
+        chunks = [
+            {"metadata": {"title": "Photosynthesis", "zim_filename": "wikipedia_en_all_maxi_2026-02.zim"}},
+            {"metadata": {"title": "Cellular Respiration", "zim_filename": "wikipedia_en_all_maxi_2026-02.zim"}},
+        ]
+        result = _format_source_citations(chunks, max_sources=20)
+        assert "Photosynthesis" in result
+        assert "Cellular Respiration" in result
+
+    def test_deduplicates_zim_sources(self):
+        """Multiple chunks from same ZIM should not repeat the ZIM source."""
+        chunks = [
+            {"metadata": {"title": "a/1", "zim_filename": "electronics.stackexchange.com_en_all_2026-02.zim"}},
+            {"metadata": {"title": "a/2", "zim_filename": "electronics.stackexchange.com_en_all_2026-02.zim"}},
+            {"metadata": {"title": "a/3", "zim_filename": "electronics.stackexchange.com_en_all_2026-02.zim"}},
+        ]
+        result = _format_source_citations(chunks, max_sources=20)
+        # The ZIM filename should appear at most once as a source heading
+        assert result.count("electronics.stackexchange") <= 2  # heading + maybe a title
+
+    def test_respects_max_sources(self):
+        """Should limit to max_sources unique ZIM files."""
+        chunks = [
+            {"metadata": {"title": f"Article {i}", "zim_filename": f"source{i}.zim"}}
+            for i in range(30)
+        ]
+        result = _format_source_citations(chunks, max_sources=5)
+        # Should only mention 5 sources
+        zim_count = sum(1 for i in range(30) if f"source{i}.zim" in result)
+        assert zim_count <= 5
+
+    def test_handles_missing_metadata(self):
+        """Should handle chunks with missing title or zim_filename gracefully."""
+        chunks = [
+            {"metadata": {}},
+            {"metadata": {"title": "Good Title"}},
+            {"metadata": {"zim_filename": "some.zim"}},
+        ]
+        result = _format_source_citations(chunks, max_sources=20)
+        assert isinstance(result, str)  # Should not crash
+
+    def test_empty_chunks_returns_empty_string(self):
+        """No chunks means no sources section."""
+        result = _format_source_citations([], max_sources=20)
+        assert result == ""
+
+    def test_path_like_titles_are_not_shown_individually(self):
+        """Titles that look like paths (a/12345) should not be shown as article titles."""
+        chunks = [
+            {"metadata": {"title": "a/12345", "zim_filename": "wiki.zim"}},
+            {"metadata": {"title": "A/Some Article", "zim_filename": "wiki.zim"}},
+        ]
+        result = _format_source_citations(chunks, max_sources=20)
+        # "a/12345" is a path-like title, should not appear as-is
+        assert "a/12345" not in result

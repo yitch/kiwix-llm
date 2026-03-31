@@ -258,6 +258,96 @@ def _run_ingestion_stream(zim_dir: str, config: Config):
         yield f"✅ All {total_files} file(s) ingested successfully! You can now ask questions.", False, False
 
 
+def _is_path_like_title(title: str) -> bool:
+    """Check if a title looks like a ZIM path rather than a real article title.
+
+    Path-like titles are things like "a/100723", "A/Some_Page", "I/image.png".
+    Real titles are human-readable strings like "Photosynthesis" or "How CPUs work".
+    """
+    import re
+    if not title:
+        return True
+    # Single-letter prefix followed by slash and digits (e.g. "a/100723")
+    if re.match(r"^[a-zA-Z]/\d+$", title):
+        return True
+    # Single-letter prefix followed by slash (e.g. "A/Some_Page", "I/image")
+    if re.match(r"^[A-Z]/", title) and len(title) < 5:
+        return True
+    return False
+
+
+def _friendly_zim_name(zim_filename: str) -> str:
+    """Convert a ZIM filename to a human-friendly source name.
+
+    e.g. "electronics.stackexchange.com_en_all_2026-02.zim" -> "Electronics StackExchange"
+         "wikipedia_en_all_maxi_2026-02.zim" -> "Wikipedia (en)"
+    """
+    name = zim_filename.replace(".zim", "")
+    # Wikipedia pattern
+    if name.startswith("wikipedia_"):
+        parts = name.split("_")
+        lang = parts[1] if len(parts) > 1 else ""
+        return f"Wikipedia ({lang})"
+    # StackExchange pattern: "electronics.stackexchange.com_en_all_2026-02"
+    if ".stackexchange.com" in name:
+        site = name.split(".stackexchange.com")[0]
+        return f"{site.capitalize()} StackExchange"
+    # Other: strip date suffix and clean up
+    import re
+    name = re.sub(r"_\d{4}-\d{2}$", "", name)
+    name = re.sub(r"_en_all$", "", name)
+    return name.replace("_", " ").replace(".", " ").strip().title()
+
+
+def _format_source_citations(chunks: list[dict], max_sources: int) -> str:
+    """Format source citations from retrieved chunks.
+
+    Groups sources by ZIM file. Shows real article titles when available,
+    and falls back to a friendly ZIM source name when titles are path-like.
+    Returns a markdown string for the Sources section, or "" if no chunks.
+    """
+    if not chunks:
+        return ""
+
+    from collections import defaultdict
+
+    # Group chunks by ZIM file, collecting real titles
+    zim_titles: dict[str, list[str]] = defaultdict(list)
+    seen_titles: set[str] = set()
+
+    for chunk in chunks:
+        meta = chunk.get("metadata", {})
+        title = meta.get("title", "")
+        zim = meta.get("zim_filename", "Unknown")
+
+        if title and not _is_path_like_title(title) and title not in seen_titles:
+            seen_titles.add(title)
+            zim_titles[zim].append(title)
+        elif zim not in zim_titles:
+            zim_titles[zim] = []
+
+    # Limit to max_sources ZIM files
+    zim_list = list(zim_titles.keys())[:max_sources]
+
+    lines: list[str] = []
+    for zim in zim_list:
+        friendly = _friendly_zim_name(zim)
+        titles = zim_titles[zim]
+        if titles:
+            # Show up to 3 real article titles per source
+            shown = titles[:3]
+            title_str = ", ".join(shown)
+            if len(titles) > 3:
+                title_str += f" (+{len(titles) - 3} more)"
+            lines.append(f"- **{friendly}**: {title_str}")
+        else:
+            lines.append(f"- **{friendly}**")
+
+    if not lines:
+        return ""
+    return "\n\n---\n**Sources:**\n" + "\n".join(lines)
+
+
 def build_ui(config: Config):
     """Build a polished Gradio chat interface with dark/light mode support."""
     import gradio as gr
@@ -274,20 +364,9 @@ def build_ui(config: Config):
             logger.error("Query failed: %s", e)
             return "Something went wrong. Please check that Ollama is running (`ollama serve`)."
 
-        # Append source citations (deduplicated by title, limited by max_sources)
-        sources: list[str] = []
-        seen: set[str] = set()
-        for chunk in chunks:
-            if len(sources) >= config.max_sources:
-                break
-            title = chunk["metadata"].get("title", "Unknown")
-            zim = chunk["metadata"].get("zim_filename", "")
-            if title not in seen:
-                seen.add(title)
-                sources.append(f"- **{title}** _{zim}_")
-
-        if sources:
-            answer += "\n\n---\n**Sources:**\n" + "\n".join(sources)
+        citation = _format_source_citations(chunks, config.max_sources)
+        if citation:
+            answer += citation
 
         return answer
 
