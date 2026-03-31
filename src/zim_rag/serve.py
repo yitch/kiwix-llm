@@ -114,26 +114,47 @@ DARK_MODE_JS = """
     }
     
     function updateButton(isDark) {
-        const btn = document.getElementById('zimrag-theme-btn');
-        if (btn) {
-            btn.innerHTML = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+        // Use a small delay to ensure the button is in the DOM
+        // This handles both initial load and dynamic updates
+        const doUpdate = function() {
+            const btn = document.getElementById('zimrag-theme-btn');
+            if (btn) {
+                btn.innerHTML = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+            }
+        };
+        
+        // Try immediately first
+        doUpdate();
+        
+        // Also try after a short delay for Gradio's dynamic rendering
+        if (document.readyState !== 'complete') {
+            setTimeout(doUpdate, 100);
+            setTimeout(doUpdate, 500);
         }
     }
     
+    // Check if dark mode is currently enabled
+    function isDarkModeEnabled() {
+        return !!document.getElementById('zimrag-dark-style');
+    }
+    
     window.zimragToggleTheme = function() {
-        const isDark = !!document.getElementById('zimrag-dark-style');
+        const isDark = isDarkModeEnabled();
         applyDarkMode(!isDark);
     };
     
     // Initialize
-    const saved = localStorage.getItem(STORAGE_KEY);
-    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const shouldBeDark = saved ? saved === '1' : prefersDark;
+    function init() {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const shouldBeDark = saved ? saved === '1' : prefersDark;
+        applyDarkMode(shouldBeDark);
+    }
     
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => applyDarkMode(shouldBeDark));
+        document.addEventListener('DOMContentLoaded', init);
     } else {
-        applyDarkMode(shouldBeDark);
+        init();
     }
 })();
 """
@@ -143,6 +164,18 @@ DARK_TOGGLE_HTML = """
     style="border-radius: 20px; padding: 0.4rem 1rem; font-size: 0.85rem; cursor: pointer; border: 1px solid #ccc; background: var(--button-secondary-background-fill, #f0f0f0);">
     🌙 Dark Mode
 </button>
+<script>
+    // Immediate inline script to set correct button text before page renders
+    (function() {
+        const saved = localStorage.getItem('zim-rag-dark');
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const isDark = saved ? saved === '1' : prefersDark;
+        const btn = document.getElementById('zimrag-theme-btn');
+        if (btn) {
+            btn.innerHTML = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+        }
+    })();
+</script>
 """
 
 
@@ -204,14 +237,17 @@ def _run_ingestion_stream(zim_dir: str, config: Config):
     """
     import threading
     import queue
-    from zim_rag.ingest import ingest_zim
+    from zim_rag.ingest import ingest_zim, _zim_priority_key
 
     zim_path = Path(zim_dir)
     if not zim_path.is_dir():
         yield "❌ Error: Invalid ZIM folder", False, True
         return
 
-    zim_files = sorted(p for p in zim_path.glob("*.zim") if p.is_file())
+    zim_files = sorted(
+        (p for p in zim_path.glob("*.zim") if p.is_file()),
+        key=_zim_priority_key
+    )
     if not zim_files:
         yield "❌ No .zim files found in folder", False, True
         return
@@ -222,7 +258,9 @@ def _run_ingestion_stream(zim_dir: str, config: Config):
     def ingest_worker():
         try:
             for i, zim_file in enumerate(zim_files, 1):
-                status_queue.put(('status', f"📚 Ingesting {zim_file.name} ({i}/{total_files})..."))
+                priority = _zim_priority_key(zim_file)[0]
+                priority_label = {0: "★★★", 1: "★★☆", 2: "★☆☆"}[priority]
+                status_queue.put(('status', f"{priority_label} Ingesting {zim_file.name} ({i}/{total_files})..."))
                 try:
                     ingest_zim(str(zim_file), config)
                     status_queue.put(('done_file', zim_file.name))

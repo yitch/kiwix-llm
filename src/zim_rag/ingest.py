@@ -18,6 +18,62 @@ from zim_rag.config import Config
 console = Console()
 
 
+def _zim_priority_key(zim_path: Path) -> tuple[int, str]:
+    """Return sort key for ZIM file priority (lower = higher priority).
+    
+    Priority:
+    0. Wikipedia "all maxi" files (broadest coverage)
+    1. Wikipedia topic-specific files (medicine, physics, etc.)
+    2. All other sources (StackExchange, LibreTexts, etc.)
+    
+    This ensures high-quality general knowledge is ingested first,
+    followed by topic-specific content, then specialized sources.
+    """
+    name = zim_path.name.lower()
+    
+    # Priority 0: Wikipedia all maxi (broadest coverage)
+    # Pattern: wikipedia_*_all_maxi_*.zim
+    if "wikipedia" in name and "_all_maxi" in name:
+        return (0, name)
+    
+    # Priority 1: Wikipedia topic-specific (still high quality)
+    # Pattern: wikipedia_*_{topic}_maxi_*.zim (e.g., medicine, physics)
+    if "wikipedia" in name and "_maxi" in name:
+        return (1, name)
+    
+    # Priority 2: Everything else (StackExchange, LibreTexts, etc.)
+    return (2, name)
+
+
+def ingest_zim_priority(zim_files: list[Path], config: Config) -> None:
+    """Ingest multiple ZIM files in priority order.
+    
+    Wikipedia "all maxi" files are ingested first for broadest coverage,
+    followed by topic-specific Wikipedia files, then other sources.
+    """
+    # Sort by priority
+    sorted_files = sorted(zim_files, key=_zim_priority_key)
+    
+    if not sorted_files:
+        console.print("[yellow]No ZIM files to ingest.[/yellow]")
+        return
+    
+    console.print(f"[bold]Ingesting {len(sorted_files)} ZIM file(s) in priority order:[/bold]")
+    for i, zf in enumerate(sorted_files, 1):
+        priority = _zim_priority_key(zf)[0]
+        priority_label = {0: "★★★", 1: "★★☆", 2: "★☆☆"}[priority]
+        console.print(f"  {i}. {priority_label} {zf.name}")
+    console.print()
+    
+    # Ingest in priority order
+    for zim_file in sorted_files:
+        try:
+            ingest_zim(str(zim_file), config)
+        except Exception as e:
+            console.print(f"[red]Failed to ingest {zim_file.name}: {e}[/red]")
+            # Continue with next file
+
+
 def extract_text_from_html(html: str) -> str:
     """Extract clean text from HTML content."""
     soup = BeautifulSoup(html, "html.parser")
