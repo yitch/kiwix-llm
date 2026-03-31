@@ -70,87 +70,44 @@ DARK_MODE_JS = """
     'use strict';
     if (window.__zimragDarkMode) return;
     window.__zimragDarkMode = true;
-    
+
     const STORAGE_KEY = 'zim-rag-dark';
-    
-    // CSS variable overrides for dark mode
-    const darkStyles = `
-        :root {
-            --body-background-fill: #0f0f0f !important;
-            --background-fill-primary: #1a1a1a !important;
-            --background-fill-secondary: #2d2d2d !important;
-            --text-color: #ffffff !important;
-            --color-text-body: #e0e0e0 !important;
-            --color-text-label: #cccccc !important;
-            --border-color-primary: #444 !important;
-            --input-background-fill: #2d2d2d !important;
-            --button-primary-background-fill: #4f6cf7 !important;
-            --block-background-fill: #1a1a1a !important;
-            --chatbot-user-background-fill: #2d4a6f !important;
-            --chatbot-bot-background-fill: #2d2d2d !important;
-        }
-    `;
-    
-    let styleEl = null;
-    
+
     function applyDarkMode(enable) {
         if (enable) {
-            if (!styleEl) {
-                styleEl = document.createElement('style');
-                styleEl.id = 'zimrag-dark-style';
-                styleEl.textContent = darkStyles;
-                document.head.appendChild(styleEl);
-            }
-            document.documentElement.classList.add('zimrag-dark');
+            document.body.classList.add('dark');
         } else {
-            if (styleEl) {
-                styleEl.remove();
-                styleEl = null;
-            }
-            document.documentElement.classList.remove('zimrag-dark');
+            document.body.classList.remove('dark');
         }
         localStorage.setItem(STORAGE_KEY, enable ? '1' : '0');
         updateButton(enable);
     }
-    
+
     function updateButton(isDark) {
-        // Use a small delay to ensure the button is in the DOM
-        // This handles both initial load and dynamic updates
         const doUpdate = function() {
-            const btn = document.getElementById('zimrag-theme-btn');
+            const el = document.getElementById('zimrag-theme-btn');
+            const btn = el ? (el.tagName === 'BUTTON' ? el : el.querySelector('button')) : null;
             if (btn) {
-                btn.innerHTML = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+                btn.textContent = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
             }
         };
-        
-        // Try immediately first
         doUpdate();
-        
-        // Also try after a short delay for Gradio's dynamic rendering
-        if (document.readyState !== 'complete') {
-            setTimeout(doUpdate, 100);
-            setTimeout(doUpdate, 500);
-        }
+        setTimeout(doUpdate, 300);
+        setTimeout(doUpdate, 800);
     }
-    
-    // Check if dark mode is currently enabled
-    function isDarkModeEnabled() {
-        return !!document.getElementById('zimrag-dark-style');
-    }
-    
+
     window.zimragToggleTheme = function() {
-        const isDark = isDarkModeEnabled();
+        const isDark = document.body.classList.contains('dark');
         applyDarkMode(!isDark);
     };
-    
-    // Initialize
+
     function init() {
         const saved = localStorage.getItem(STORAGE_KEY);
         const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
         const shouldBeDark = saved ? saved === '1' : prefersDark;
         applyDarkMode(shouldBeDark);
     }
-    
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
@@ -334,70 +291,63 @@ def build_ui(config: Config):
 
         return answer
 
-    def pick_zim_folder(current_dir: str):
-        if sys.platform == "darwin":
-            new_dir = _pick_folder_macos(current_dir)
-        else:
-            new_dir = current_dir
-        zim_list = _list_zim_files(new_dir)
-        has_zims = ".zim" in zim_list.lower()
-        return new_dir, gr.update(value=zim_list, visible=True), gr.update(visible=has_zims)
+    def scan_folder(folder_str: str):
+        """Scan a folder for .zim files and populate the dropdown."""
+        zim_dir = Path(folder_str)
+        if not zim_dir.is_dir():
+            return gr.update(choices=[], value=None), gr.update(visible=False), gr.update(visible=False, value="")
+        zims = sorted(p.name for p in zim_dir.glob("*.zim") if p.is_file())
+        has_zims = len(zims) > 0
+        return (
+            gr.update(choices=zims, value=zims[0] if zims else None),
+            gr.update(visible=has_zims),
+            gr.update(visible=False, value=""),
+        )
 
-    def start_ingestion(zim_dir: str):
-        """Generator for ingestion progress.
-        
-        Returns: (status_message, ingest_button_interactive)
-        """
-        for status_msg, is_running, has_error in _run_ingestion_stream(zim_dir, config):
-            if status_msg == "":  # Keep-alive, no update
+    def start_ingestion(folder_str: str):
+        """Generator that streams ingestion progress."""
+        for status_msg, is_running, has_error in _run_ingestion_stream(folder_str, config):
+            if status_msg == "":
                 yield gr.skip(), gr.skip()
             else:
-                yield status_msg, not is_running
+                yield gr.update(value=status_msg, visible=True), gr.update(interactive=not is_running)
 
-    with gr.Blocks(fill_height=True) as app:
+    with gr.Blocks() as app:
+        # ── Header toolbar ────────────────────────────────────────────
         with gr.Row(elem_id="header-toolbar"):
-            zim_btn = gr.Button("📂 ZIM Folder", variant="secondary", size="sm")
-            ingest_btn = gr.Button("🚀 Ingest", variant="primary", size="sm", visible=False)
-            gr.HTML(DARK_TOGGLE_HTML)
-
-        zim_dir_state = gr.State(config.zim_dir)
-        zim_panel = gr.Markdown("", elem_id="zim-path-display", visible=False)
-        
-        # Ingestion status panel
-        ingest_status = gr.Markdown("", visible=False)
-
-        def on_zim_folder_changed(new_dir, zim_md, ingest_visible):
-            has_zims = ".zim" in zim_md.lower() if zim_md else False
-            return (
-                new_dir,
-                gr.update(value=zim_md, visible=True),
-                gr.update(visible=has_zims),
-                gr.update(value="", visible=False)
+            dark_btn = gr.Button(
+                "\U0001f319 Dark Mode", variant="secondary", size="sm",
+                elem_id="zimrag-theme-btn",
             )
+        dark_btn.click(fn=None, js="() => window.zimragToggleTheme()")
 
-        zim_btn.click(
-            fn=pick_zim_folder,
-            inputs=[zim_dir_state],
-            outputs=[zim_dir_state, zim_panel, ingest_btn],
-        ).then(
-            fn=on_zim_folder_changed,
-            inputs=[zim_dir_state, zim_panel, ingest_btn],
-            outputs=[zim_dir_state, zim_panel, ingest_btn, ingest_status]
+        # ── ZIM Files & Ingest (collapsible) ──────────────────────────
+        with gr.Accordion("\U0001f4c2 ZIM Files & Ingest", open=False):
+            with gr.Row():
+                folder_path = gr.Textbox(
+                    value=config.zim_dir,
+                    label="ZIM Folder Path",
+                    scale=4,
+                    interactive=True,
+                )
+                scan_btn = gr.Button("\U0001f50d Scan", variant="secondary", scale=1)
+
+            zim_dropdown = gr.Dropdown(label="ZIM Files Found", choices=[], interactive=True)
+            ingest_btn = gr.Button("\U0001f680 Start Ingest", variant="primary", visible=False)
+            ingest_log = gr.Textbox(label="Ingest Log", interactive=False, visible=False, lines=5)
+
+        scan_btn.click(
+            fn=scan_folder,
+            inputs=[folder_path],
+            outputs=[zim_dropdown, ingest_btn, ingest_log],
         )
-
-        # Ingest button click - set initial status and disable button
-        def on_ingest_start():
-            return "⏳ Starting ingestion...", gr.update(interactive=False)
-        
         ingest_btn.click(
-            fn=on_ingest_start,
-            outputs=[ingest_status, ingest_btn]
-        ).then(
             fn=start_ingestion,
-            inputs=[zim_dir_state],
-            outputs=[ingest_status, ingest_btn]
+            inputs=[folder_path],
+            outputs=[ingest_log, ingest_btn],
         )
 
+        # ── Chat ──────────────────────────────────────────────────────
         gr.ChatInterface(
             fn=respond,
             title="zim-rag",
@@ -411,8 +361,7 @@ def build_ui(config: Config):
                 "What are the symptoms of diabetes?",
                 "How does a CPU work?",
             ],
-            fill_height=True,
-            autofocus=True,
+            fill_height=False,
         )
 
     return app
