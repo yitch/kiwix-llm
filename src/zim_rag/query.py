@@ -14,8 +14,16 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 
+class NoIngestedDataError(Exception):
+    """Raised when no data has been ingested yet."""
+    pass
+
+
 def retrieve_chunks(question: str, config: Config) -> list[dict]:
-    """Retrieve the top-k most relevant chunks from ChromaDB."""
+    """Retrieve the top-k most relevant chunks from ChromaDB.
+
+    Raises NoIngestedDataError if no data has been ingested.
+    """
     import chromadb
     from chromadb.config import Settings
     from langchain_ollama import OllamaEmbeddings
@@ -33,12 +41,10 @@ def retrieve_chunks(question: str, config: Config) -> list[dict]:
     try:
         collection = client.get_collection(name=config.collection_name)
     except Exception:
-        console.print("[red]Error:[/red] No ingested data found. Run 'zim-rag ingest' first.")
-        raise SystemExit(1)
+        raise NoIngestedDataError("No ingested data found. Run 'zim-rag ingest' first.")
 
     if collection.count() == 0:
-        console.print("[red]Error:[/red] Collection is empty. Run 'zim-rag ingest' first.")
-        raise SystemExit(1)
+        raise NoIngestedDataError("Collection is empty. Run 'zim-rag ingest' first.")
 
     query_embedding = embeddings.embed_query(question)
 
@@ -83,7 +89,11 @@ def query_rag(question: str, config: Config | None = None, show_sources: bool = 
         config = Config.load()
 
     # Retrieve relevant chunks
-    chunks = retrieve_chunks(question, config)
+    try:
+        chunks = retrieve_chunks(question, config)
+    except NoIngestedDataError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise SystemExit(1)
 
     if not chunks:
         return "No relevant information found in the knowledge base."
@@ -135,7 +145,14 @@ def query_rag_simple(question: str, config: Config) -> tuple[str, list[dict]]:
     """Query without printing — returns (answer, chunks) for use by the web UI."""
     import ollama as ollama_client
 
-    chunks = retrieve_chunks(question, config)
+    try:
+        chunks = retrieve_chunks(question, config)
+    except NoIngestedDataError:
+        return (
+            "No knowledge base found. Please ingest a ZIM file first:\n\n"
+            "```\nzim-rag ingest ~/zim-files/your-file.zim\n```"
+        ), []
+
     if not chunks:
         return "No relevant information found in the knowledge base.", []
 

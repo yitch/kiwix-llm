@@ -17,18 +17,65 @@ from zim_rag.query import query_rag_simple
 console = Console()
 logger = logging.getLogger(__name__)
 
+CUSTOM_CSS = """
+/* Overall polish */
+.gradio-container {
+    max-width: 900px !important;
+    margin: 0 auto !important;
+}
+
+/* Header area */
+#header {
+    text-align: center;
+    padding: 1.5rem 0 0.5rem 0;
+}
+#header h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+#header p {
+    opacity: 0.7;
+    font-size: 0.95rem;
+}
+
+/* Chat area */
+.chatbot {
+    border-radius: 12px !important;
+    min-height: 500px !important;
+}
+
+/* Status bar */
+#status-bar {
+    text-align: center;
+    opacity: 0.5;
+    font-size: 0.8rem;
+    padding: 0.5rem 0;
+}
+
+/* Example buttons */
+.example-btn {
+    border-radius: 20px !important;
+    font-size: 0.85rem !important;
+}
+"""
+
 
 def build_ui(config: Config):
-    """Build the Gradio interface."""
+    """Build a polished Gradio chat interface with dark/light mode support."""
     import gradio as gr
 
-    def answer_question(question: str, history: list) -> str:
-        if not question.strip():
+    def respond(message: str, history: list) -> str:
+        if not message or not message.strip():
             return ""
-        if len(question) > MAX_QUERY_LENGTH:
-            return f"Question too long (max {MAX_QUERY_LENGTH:,} characters)."
+        if len(message) > MAX_QUERY_LENGTH:
+            return f"Question too long (max {MAX_QUERY_LENGTH:,} characters). Please shorten it."
 
-        answer, chunks = query_rag_simple(question, config)
+        try:
+            answer, chunks = query_rag_simple(message, config)
+        except Exception as e:
+            logger.error("Query failed: %s", e)
+            return "Something went wrong. Please check that Ollama is running (`ollama serve`)."
 
         # Append source citations
         sources: list[str] = []
@@ -38,7 +85,7 @@ def build_ui(config: Config):
             zim = chunk["metadata"].get("zim_filename", "")
             if title not in seen:
                 seen.add(title)
-                sources.append(f"- **{title}** ({zim})")
+                sources.append(f"- **{title}** _{zim}_")
 
         if sources:
             answer += "\n\n---\n**Sources:**\n" + "\n".join(sources)
@@ -46,17 +93,20 @@ def build_ui(config: Config):
         return answer
 
     app = gr.ChatInterface(
-        fn=answer_question,
-        title="zim-rag: Offline Knowledge Assistant",
+        fn=respond,
+        title="zim-rag",
         description=(
-            "Ask questions against your locally ingested ZIM knowledge base. "
-            f"Powered by Ollama ({config.llm_model}) + ChromaDB. Top-K: {config.top_k}"
+            "Offline Knowledge Assistant — ask questions against your locally ingested "
+            "ZIM knowledge base."
         ),
         examples=[
             "What is photosynthesis?",
             "Explain how TCP/IP works",
             "What are the symptoms of diabetes?",
+            "How does a CPU work?",
         ],
+        fill_height=True,
+        autofocus=True,
     )
 
     return app
@@ -72,7 +122,6 @@ def start_kiwix_serve(config: Config, zim_paths: list[str]) -> subprocess.Popen 
         return None
 
     if not zim_paths:
-        # Try to find ZIM files in the configured directory
         zim_dir = Path(config.zim_dir)
         if zim_dir.exists():
             zim_paths = [
@@ -94,7 +143,6 @@ def start_kiwix_serve(config: Config, zim_paths: list[str]) -> subprocess.Popen 
         stderr=subprocess.PIPE,
     )
 
-    # Check that the process didn't immediately fail
     time.sleep(1)
     if proc.poll() is not None:
         stderr_output = proc.stderr.read().decode(errors="replace") if proc.stderr else ""
@@ -149,8 +197,13 @@ def serve(
             server_name=config.host,
             server_port=config.port,
             share=share,
-            show_error=False,
-            theme=gr.themes.Soft(),
+            show_error=True,
+            theme=gr.themes.Soft(
+                primary_hue="blue",
+                secondary_hue="slate",
+                neutral_hue="slate",
+            ),
+            css=CUSTOM_CSS,
         )
     finally:
         if kiwix_proc and kiwix_proc.poll() is None:
