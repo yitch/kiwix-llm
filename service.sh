@@ -131,6 +131,7 @@ PLIST_EOF
 cmd_install() {
     check_venv
     mkdir -p "$LOG_DIR"
+    chmod 700 "$LOG_DIR"
     mkdir -p "$(dirname "$PLIST_PATH")"
 
     # Ensure Ollama starts on boot

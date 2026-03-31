@@ -170,10 +170,17 @@ fi
 info "Detected ${RAM_GB}GB RAM. Pulling recommended LLM: ${LLM_MODEL}..."
 ollama pull "$LLM_MODEL"
 
-# Update config with detected model (LLM_MODEL is from a hardcoded set, safe for sed)
-if command -v sed &>/dev/null; then
-    sed -i '' "s/llm_model: .*/llm_model: \"${LLM_MODEL}\"/" "${CONFIG_DIR}/config.yaml" 2>/dev/null || true
-fi
+# Update config with detected model — validate against allowlist before sed substitution
+case "$LLM_MODEL" in
+    qwen3:4b|qwen3:8b|qwen3:14b|mistral-small)
+        if command -v sed &>/dev/null; then
+            sed -i '' "s/llm_model: .*/llm_model: \"${LLM_MODEL}\"/" "${CONFIG_DIR}/config.yaml" 2>/dev/null || true
+        fi
+        ;;
+    *)
+        warn "Unknown model '${LLM_MODEL}', skipping config update."
+        ;;
+esac
 
 # If we started Ollama, stop it — user can start it themselves
 if [[ -n "$OLLAMA_PID" ]]; then
