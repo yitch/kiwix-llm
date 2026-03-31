@@ -45,32 +45,19 @@ def build_ui(config: Config):
 
         return answer
 
-    with gr.Blocks(
+    app = gr.ChatInterface(
+        fn=answer_question,
         title="zim-rag: Offline Knowledge Assistant",
-        theme=gr.themes.Soft(),
-    ) as app:
-        gr.Markdown(
-            "# zim-rag: Offline Knowledge Assistant\n"
+        description=(
             "Ask questions against your locally ingested ZIM knowledge base. "
-            "Powered by Ollama + ChromaDB."
-        )
-
-        chatbot = gr.ChatInterface(
-            fn=answer_question,
-            type="messages",
-            title="",
-            examples=[
-                "What is photosynthesis?",
-                "Explain how TCP/IP works",
-                "What are the symptoms of diabetes?",
-            ],
-        )
-
-        gr.Markdown(
-            f"*Model: {config.llm_model} | "
-            f"Embeddings: {config.embed_model} | "
-            f"Top-K: {config.top_k}*"
-        )
+            f"Powered by Ollama ({config.llm_model}) + ChromaDB. Top-K: {config.top_k}"
+        ),
+        examples=[
+            "What is photosynthesis?",
+            "Explain how TCP/IP works",
+            "What are the symptoms of diabetes?",
+        ],
+    )
 
     return app
 
@@ -135,6 +122,8 @@ def serve(
     share: bool = False,
 ) -> None:
     """Launch the Gradio web UI, optionally with kiwix-serve."""
+    import gradio as gr
+
     if config is None:
         config = Config.load()
 
@@ -161,6 +150,7 @@ def serve(
             server_port=config.port,
             share=share,
             show_error=False,
+            theme=gr.themes.Soft(),
         )
     finally:
         if kiwix_proc and kiwix_proc.poll() is None:
