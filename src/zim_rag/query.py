@@ -149,7 +149,11 @@ def query_rag_simple(question: str, config: Config) -> tuple[str, list[dict]]:
         chunks = retrieve_chunks(question, config)
     except NoIngestedDataError:
         return (
-            "No knowledge base found. Please ingest a ZIM file first:\n\n"
+            "📚 **No knowledge base found.**\n\n"
+            "Please ingest ZIM files first:\n\n"
+            "1. Click **📂 ZIM Folder** to select your ZIM files folder\n"
+            "2. Click **🚀 Ingest** to process the files\n\n"
+            "Or run from command line:\n"
             "```\nzim-rag ingest ~/zim-files/your-file.zim\n```"
         ), []
 

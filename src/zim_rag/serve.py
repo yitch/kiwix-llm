@@ -18,12 +18,6 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 CUSTOM_CSS = """
-/* Overall polish */
-.gradio-container {
-    max-width: 900px !important;
-    margin: 0 auto !important;
-}
-
 /* Header toolbar */
 #header-toolbar {
     display: flex !important;
@@ -42,60 +36,12 @@ CUSTOM_CSS = """
     padding: 0.4rem 1rem !important;
 }
 
-/* Dark mode toggle switch */
-.dark-toggle-wrap {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
-}
-.toggle-icon { font-size: 1rem; line-height: 1; }
-.toggle-switch {
-    position: relative;
-    display: inline-block;
-    width: 40px;
-    height: 22px;
-}
-.toggle-switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-    position: absolute;
-}
-.toggle-slider {
-    position: absolute;
-    cursor: pointer;
-    inset: 0;
-    background: #b0b0b0;
-    border-radius: 22px;
-    transition: 0.3s;
-}
-.toggle-slider:before {
-    content: "";
-    position: absolute;
-    height: 16px;
-    width: 16px;
-    left: 3px;
-    bottom: 3px;
-    background: white;
-    border-radius: 50%;
-    transition: 0.3s;
-}
-.toggle-switch input:checked + .toggle-slider {
-    background: #4f6cf7;
-}
-.toggle-switch input:checked + .toggle-slider:before {
-    transform: translateX(18px);
-}
-
 /* ZIM path display panel */
 #zim-path-display {
     border-radius: 8px;
     padding: 0.75rem 1rem;
     margin: 0.25rem 0 0.5rem 0;
     font-size: 0.9rem;
-    background: var(--block-background-fill);
-    border: 1px solid var(--border-color-primary);
 }
 
 /* Chat area */
@@ -120,44 +66,83 @@ CUSTOM_CSS = """
 """
 
 DARK_MODE_JS = """
-() => {
-    const stored = localStorage.getItem('zim-rag-dark-mode');
-    let isDark;
-    if (stored !== null) {
-        isDark = stored === 'true';
-    } else {
-        isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+(function() {
+    'use strict';
+    if (window.__zimragDarkMode) return;
+    window.__zimragDarkMode = true;
+    
+    const STORAGE_KEY = 'zim-rag-dark';
+    
+    // CSS variable overrides for dark mode
+    const darkStyles = `
+        :root {
+            --body-background-fill: #0f0f0f !important;
+            --background-fill-primary: #1a1a1a !important;
+            --background-fill-secondary: #2d2d2d !important;
+            --text-color: #ffffff !important;
+            --color-text-body: #e0e0e0 !important;
+            --color-text-label: #cccccc !important;
+            --border-color-primary: #444 !important;
+            --input-background-fill: #2d2d2d !important;
+            --button-primary-background-fill: #4f6cf7 !important;
+            --block-background-fill: #1a1a1a !important;
+            --chatbot-user-background-fill: #2d4a6f !important;
+            --chatbot-bot-background-fill: #2d2d2d !important;
+        }
+    `;
+    
+    let styleEl = null;
+    
+    function applyDarkMode(enable) {
+        if (enable) {
+            if (!styleEl) {
+                styleEl = document.createElement('style');
+                styleEl.id = 'zimrag-dark-style';
+                styleEl.textContent = darkStyles;
+                document.head.appendChild(styleEl);
+            }
+            document.documentElement.classList.add('zimrag-dark');
+        } else {
+            if (styleEl) {
+                styleEl.remove();
+                styleEl = null;
+            }
+            document.documentElement.classList.remove('zimrag-dark');
+        }
+        localStorage.setItem(STORAGE_KEY, enable ? '1' : '0');
+        updateButton(enable);
     }
-    if (isDark) {
-        document.body.classList.add('dark');
-    } else {
-        document.body.classList.remove('dark');
+    
+    function updateButton(isDark) {
+        const btn = document.getElementById('zimrag-theme-btn');
+        if (btn) {
+            btn.innerHTML = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+        }
     }
-
-    window.toggleDarkMode = function() {
-        const dark = document.body.classList.toggle('dark');
-        localStorage.setItem('zim-rag-dark-mode', dark);
-        const cb = document.getElementById('dark-toggle-cb');
-        if (cb) cb.checked = dark;
+    
+    window.zimragToggleTheme = function() {
+        const isDark = !!document.getElementById('zimrag-dark-style');
+        applyDarkMode(!isDark);
     };
-
-    setTimeout(() => {
-        const cb = document.getElementById('dark-toggle-cb');
-        if (cb) cb.checked = document.body.classList.contains('dark');
-    }, 200);
-}
+    
+    // Initialize
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const shouldBeDark = saved ? saved === '1' : prefersDark;
+    
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => applyDarkMode(shouldBeDark));
+    } else {
+        applyDarkMode(shouldBeDark);
+    }
+})();
 """
 
 DARK_TOGGLE_HTML = """
-<div class="dark-toggle-wrap">
-    <span class="toggle-icon">\u2600\ufe0f</span>
-    <label class="toggle-switch">
-        <input type="checkbox" id="dark-toggle-cb"
-               onchange="window.toggleDarkMode && window.toggleDarkMode()">
-        <span class="toggle-slider"></span>
-    </label>
-    <span class="toggle-icon">\U0001f319</span>
-</div>
+<button id="zimrag-theme-btn" onclick="window.zimragToggleTheme(); return false;" 
+    style="border-radius: 20px; padding: 0.4rem 1rem; font-size: 0.85rem; cursor: pointer; border: 1px solid #ccc; background: var(--button-secondary-background-fill, #f0f0f0);">
+    🌙 Dark Mode
+</button>
 """
 
 
@@ -209,6 +194,75 @@ def _pick_folder_macos(current_dir: str) -> str:
     return current_dir
 
 
+def _run_ingestion_stream(zim_dir: str, config: Config):
+    """Generator that runs ingestion and yields progress updates.
+    
+    Yields: (status_message, is_running, has_error)
+    - status_message: str message to display
+    - is_running: bool - True if ingestion is still running
+    - has_error: bool - True if there was an error
+    """
+    import threading
+    import queue
+    from zim_rag.ingest import ingest_zim
+
+    zim_path = Path(zim_dir)
+    if not zim_path.is_dir():
+        yield "❌ Error: Invalid ZIM folder", False, True
+        return
+
+    zim_files = sorted(p for p in zim_path.glob("*.zim") if p.is_file())
+    if not zim_files:
+        yield "❌ No .zim files found in folder", False, True
+        return
+
+    total_files = len(zim_files)
+    status_queue = queue.Queue()
+    
+    def ingest_worker():
+        try:
+            for i, zim_file in enumerate(zim_files, 1):
+                status_queue.put(('status', f"📚 Ingesting {zim_file.name} ({i}/{total_files})..."))
+                try:
+                    ingest_zim(str(zim_file), config)
+                    status_queue.put(('done_file', zim_file.name))
+                except Exception as e:
+                    status_queue.put(('error', f"Error ingesting {zim_file.name}: {e}"))
+            status_queue.put(('complete', None))
+        except Exception as e:
+            status_queue.put(('error', str(e)))
+
+    # Start ingestion in background thread
+    thread = threading.Thread(target=ingest_worker, daemon=True)
+    thread.start()
+
+    completed = []
+    errors = []
+    
+    # Stream status updates
+    while True:
+        try:
+            msg_type, msg = status_queue.get(timeout=0.5)
+            if msg_type == 'status':
+                yield msg, True, False
+            elif msg_type == 'done_file':
+                completed.append(msg)
+            elif msg_type == 'error':
+                errors.append(msg)
+                yield f"⚠️ {msg}", True, False
+            elif msg_type == 'complete':
+                break
+        except queue.Empty:
+            yield "", True, False  # Keep alive (empty message = no update)
+            continue
+
+    # Final status
+    if errors:
+        yield f"✅ Completed {len(completed)}/{total_files} files with {len(errors)} errors", False, bool(errors)
+    else:
+        yield f"✅ All {total_files} file(s) ingested successfully! You can now ask questions.", False, False
+
+
 def build_ui(config: Config):
     """Build a polished Gradio chat interface with dark/light mode support."""
     import gradio as gr
@@ -225,10 +279,12 @@ def build_ui(config: Config):
             logger.error("Query failed: %s", e)
             return "Something went wrong. Please check that Ollama is running (`ollama serve`)."
 
-        # Append source citations
+        # Append source citations (deduplicated by title, limited by max_sources)
         sources: list[str] = []
         seen: set[str] = set()
         for chunk in chunks:
+            if len(sources) >= config.max_sources:
+                break
             title = chunk["metadata"].get("title", "Unknown")
             zim = chunk["metadata"].get("zim_filename", "")
             if title not in seen:
@@ -245,20 +301,63 @@ def build_ui(config: Config):
             new_dir = _pick_folder_macos(current_dir)
         else:
             new_dir = current_dir
-        return new_dir, gr.update(value=_list_zim_files(new_dir), visible=True)
+        zim_list = _list_zim_files(new_dir)
+        has_zims = ".zim" in zim_list.lower()
+        return new_dir, gr.update(value=zim_list, visible=True), gr.update(visible=has_zims)
+
+    def start_ingestion(zim_dir: str):
+        """Generator for ingestion progress.
+        
+        Returns: (status_message, ingest_button_interactive)
+        """
+        for status_msg, is_running, has_error in _run_ingestion_stream(zim_dir, config):
+            if status_msg == "":  # Keep-alive, no update
+                yield gr.skip(), gr.skip()
+            else:
+                yield status_msg, not is_running
 
     with gr.Blocks(fill_height=True) as app:
         with gr.Row(elem_id="header-toolbar"):
-            zim_btn = gr.Button("\U0001f4c2 ZIM Folder", variant="secondary", size="sm")
+            zim_btn = gr.Button("📂 ZIM Folder", variant="secondary", size="sm")
+            ingest_btn = gr.Button("🚀 Ingest", variant="primary", size="sm", visible=False)
             gr.HTML(DARK_TOGGLE_HTML)
 
         zim_dir_state = gr.State(config.zim_dir)
         zim_panel = gr.Markdown("", elem_id="zim-path-display", visible=False)
+        
+        # Ingestion status panel
+        ingest_status = gr.Markdown("", visible=False)
+
+        def on_zim_folder_changed(new_dir, zim_md, ingest_visible):
+            has_zims = ".zim" in zim_md.lower() if zim_md else False
+            return (
+                new_dir,
+                gr.update(value=zim_md, visible=True),
+                gr.update(visible=has_zims),
+                gr.update(value="", visible=False)
+            )
 
         zim_btn.click(
             fn=pick_zim_folder,
             inputs=[zim_dir_state],
-            outputs=[zim_dir_state, zim_panel],
+            outputs=[zim_dir_state, zim_panel, ingest_btn],
+        ).then(
+            fn=on_zim_folder_changed,
+            inputs=[zim_dir_state, zim_panel, ingest_btn],
+            outputs=[zim_dir_state, zim_panel, ingest_btn, ingest_status]
+        )
+
+        # Ingest button click - set initial status and disable button
+        def on_ingest_start():
+            return "⏳ Starting ingestion...", gr.update(interactive=False)
+        
+        ingest_btn.click(
+            fn=on_ingest_start,
+            outputs=[ingest_status, ingest_btn]
+        ).then(
+            fn=start_ingestion,
+            inputs=[zim_dir_state],
+            outputs=[ingest_status, ingest_btn]
         )
 
         gr.ChatInterface(
@@ -361,6 +460,9 @@ def serve(
     signal.signal(signal.SIGINT, cleanup)
     signal.signal(signal.SIGTERM, cleanup)
 
+    # Prepare head HTML with the dark mode script
+    head_html = f"<script>{DARK_MODE_JS}</script>"
+    
     try:
         app.launch(
             server_name=config.host,
@@ -373,7 +475,7 @@ def serve(
                 neutral_hue="slate",
             ),
             css=CUSTOM_CSS,
-            js=DARK_MODE_JS,
+            head=head_html,
         )
     finally:
         if kiwix_proc and kiwix_proc.poll() is None:

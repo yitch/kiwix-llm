@@ -30,7 +30,11 @@ DEFAULTS: dict[str, Any] = {
         "chunk_overlap": 50,
     },
     "query": {
-        "top_k": 5,
+        # Increased from 5 to 50 for better coverage across multiple ZIM files
+        # With 28+ ZIM files, top_k=5 only retrieves 5 chunks total - too few
+        "top_k": 50,
+        # Maximum unique sources to display in UI (deduplicated by title)
+        "max_sources": 20,
         "system_prompt": (
             "You are a helpful assistant that answers questions using the provided context "
             "from reference articles.\n"
@@ -68,6 +72,7 @@ class Config:
     chunk_size: int = DEFAULTS["chunking"]["chunk_size"]
     chunk_overlap: int = DEFAULTS["chunking"]["chunk_overlap"]
     top_k: int = DEFAULTS["query"]["top_k"]
+    max_sources: int = DEFAULTS["query"]["max_sources"]
     system_prompt: str = DEFAULTS["query"]["system_prompt"]
     batch_size: int = DEFAULTS["ingest"]["batch_size"]
     min_article_length: int = DEFAULTS["ingest"]["min_article_length"]
@@ -138,7 +143,8 @@ class Config:
             collection_name=str(get("chromadb", "collection_name", DEFAULTS["chromadb"]["collection_name"])),
             chunk_size=safe_int(get("chunking", "chunk_size", DEFAULTS["chunking"]["chunk_size"]), 500),
             chunk_overlap=safe_int(get("chunking", "chunk_overlap", DEFAULTS["chunking"]["chunk_overlap"]), 50),
-            top_k=safe_int(get("query", "top_k", DEFAULTS["query"]["top_k"]), 5),
+            top_k=safe_int(get("query", "top_k", DEFAULTS["query"]["top_k"]), 50),
+            max_sources=safe_int(get("query", "max_sources", DEFAULTS["query"]["max_sources"]), 20),
             system_prompt=str(get("query", "system_prompt", DEFAULTS["query"]["system_prompt"])),
             batch_size=safe_int(get("ingest", "batch_size", DEFAULTS["ingest"]["batch_size"]), 100),
             min_article_length=safe_int(get("ingest", "min_article_length", DEFAULTS["ingest"]["min_article_length"]), 100),
