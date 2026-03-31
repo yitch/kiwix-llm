@@ -258,6 +258,12 @@ def _run_ingestion_stream(zim_dir: str, config: Config):
         yield f"✅ All {total_files} file(s) ingested successfully! You can now ask questions.", False, False
 
 
+def _sanitize_for_markdown(text: str) -> str:
+    """Strip characters that could be used for markdown/HTML injection."""
+    import re
+    return re.sub(r"[`\[\]()<>{}]", "", text)
+
+
 def _is_path_like_title(title: str) -> bool:
     """Check if a title looks like a ZIM path rather than a real article title.
 
@@ -322,7 +328,7 @@ def _format_source_citations(chunks: list[dict], max_sources: int) -> str:
 
         if title and not _is_path_like_title(title) and title not in seen_titles:
             seen_titles.add(title)
-            zim_titles[zim].append(title)
+            zim_titles[zim].append(_sanitize_for_markdown(title))
         elif zim not in zim_titles:
             zim_titles[zim] = []
 
@@ -331,7 +337,7 @@ def _format_source_citations(chunks: list[dict], max_sources: int) -> str:
 
     lines: list[str] = []
     for zim in zim_list:
-        friendly = _friendly_zim_name(zim)
+        friendly = _sanitize_for_markdown(_friendly_zim_name(zim))
         titles = zim_titles[zim]
         if titles:
             # Show up to 3 real article titles per source
@@ -508,6 +514,12 @@ def serve(
 
     if config is None:
         config = Config.load()
+
+    if share:
+        logger.warning(
+            "share=True creates a public tunnel with NO authentication. "
+            "Anyone with the URL can browse arbitrary directories via the folder textbox."
+        )
 
     kiwix_proc = None
     if kiwix_browse:
